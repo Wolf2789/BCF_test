@@ -1,0 +1,79 @@
+---
+- hosts: node1
+  become: true
+  tasks:
+
+  - name: Get hostname
+    shell: hostname -f
+    register: node1_hostname
+
+  - name: Install apache
+    apt: name=apache2 state=present update_cache=yes
+
+  - name: Create html directory
+    file: path=/var/www state=directory
+
+  - name: Create index.html file
+    shell: echo 'Welcome to ubuntu on {{node1_hostname.stdout}}' > /var/www/index.html
+
+  - name: Change index.html mode
+    file: dest=/var/www/index.html mode=0664
+
+  - name: Add apache iptable rule
+    command: iptables -I INPUT 1 -p tcp --dport http -j ACCEPT -m comment --comment "Apache on port 80"
+
+  - name: Save iptable
+    command: iptables-save
+
+  - name: Start apache
+    service: name=apache2 state=started enabled=yes
+
+
+- hosts: node2
+  become: true
+  tasks:
+
+  - name: Get hostname
+    shell: hostname -f
+    register: node2_hostname
+
+  - name: Install httpd
+    yum: name=httpd state=installed update_cache=yes
+
+  - name: Create html directory
+    file: path=/var/www/html state=directory
+
+  - name: Create index.html file
+    shell: echo 'Welcome to centos on {{node2_hostname.stdout}}' > /var/www/html/index.html
+
+  - name: Change index.html mode
+    file: dest=/var/www/html/index.html mode=0664
+
+  - name: Start httpd
+    service: name=httpd state=started enabled=yes
+
+  - name: Open port 80
+    firewalld: service=http permanent=true state=enabled
+
+  - name: Restart firewalld
+    service: name=firewalld state=restarted
+
+
+- hosts: master
+  become: true
+  tasks:
+
+  - name: Add epel-release repo
+    yum: name=epel-release state=present
+
+  - name: Install nginx
+    yum: name=nginx state=installed update_cache=yes
+
+  - name: Append to hosts
+    lineinfile: path=/etc/hosts line="127.0.0.1   nginx" insertbefore=BOF
+
+  - name: Setup nginx config
+    copy: src=nginx.conf dest=/etc/nginx/nginx.conf
+
+  - name: Start nginx
+    service: name=nginx enabled=yes state=started
